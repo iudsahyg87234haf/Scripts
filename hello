@@ -193,7 +193,7 @@ function Library:MakeDraggable(Instance, Cutoff)
     end)
 end;
 
-function Library:AddToolTip(InfoStr, HoverInstance)
+function Library:AddToolTip(InfoStr, HoverInstance, AllowOpenedFrame)
     local X, Y = Library:GetTextBounds(InfoStr, Library.Font, 14);
     local Tooltip = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor,
@@ -230,7 +230,7 @@ function Library:AddToolTip(InfoStr, HoverInstance)
     local IsHovering = false
 
     HoverInstance.MouseEnter:Connect(function()
-        if Library:MouseIsOverOpenedFrame() then
+        if (not AllowOpenedFrame) and Library:MouseIsOverOpenedFrame() then
             return
         end
 
@@ -2220,7 +2220,6 @@ do
         local Container = Groupbox.Container;
 
         local RelativeOffset = 0;
-
         if not Info.Compact then
             local DropdownLabel = Library:CreateLabel({
                 Size = UDim2.new(1, 0, 0, 10);
@@ -2405,6 +2404,7 @@ do
 
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values;
+            local ValueTooltips = Info.ValueTooltips or Info.Tooltips or Info.ValueToolTips or Info.ToolTips;
             local Buttons = {};
 
             for _, Element in next, Scrolling:GetChildren() do
@@ -2445,6 +2445,14 @@ do
                     ZIndex = 25;
                     Parent = Button;
                 });
+
+                if type(ValueTooltips) == 'table' then
+                    local ValueTooltip = ValueTooltips[Idx] or ValueTooltips[Value];
+
+                    if type(ValueTooltip) == 'string' then
+                        Library:AddToolTip(ValueTooltip, Button, true);
+                    end;
+                end;
 
                 Library:OnHighlight(Button, Button,
                     { BorderColor3 = 'AccentColor', ZIndex = 24 },
@@ -2503,6 +2511,7 @@ do
 
                             Library:SafeCallback(Dropdown.Callback, Dropdown.Value);
                             Library:SafeCallback(Dropdown.Changed, Dropdown.Value);
+                            Library:UpdateDependencyBoxes();
 
                             Library:AttemptSave();
                         end;
@@ -2569,6 +2578,7 @@ do
 
             Library:SafeCallback(Dropdown.Callback, Dropdown.Value);
             Library:SafeCallback(Dropdown.Changed, Dropdown.Value);
+            Library:UpdateDependencyBoxes();
         end;
 
         DropdownOuter.InputBegan:Connect(function(Input)
@@ -2683,8 +2693,19 @@ do
             for _, Dependency in next, Depbox.Dependencies do
                 local Elem = Dependency[1];
                 local Value = Dependency[2];
+                local Matches = true;
 
-                if Elem.Type == 'Toggle' and Elem.Value ~= Value then
+                if Elem.Type == 'Toggle' then
+                    Matches = Elem.Value == Value;
+                elseif Elem.Type == 'Dropdown' then
+                    if Elem.Multi then
+                        Matches = Elem.Value[Value] == true;
+                    else
+                        Matches = Elem.Value == Value;
+                    end;
+                end;
+
+                if not Matches then
                     Holder.Visible = false;
                     Depbox:Resize();
                     return;
